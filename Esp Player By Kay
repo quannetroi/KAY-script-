@@ -1,0 +1,299 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local playerESPEnabled = false
+local playerESPConnections = {}
+local playerAddedConnection = nil
+
+--notification
+local function notify(title, text, duration)
+    print("["..title.."] "..text)
+    
+    local sg = Instance.new("ScreenGui")
+    sg.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    sg.ResetOnSpawn = false
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 280, 0, 70)
+    frame.Position = UDim2.new(0.5, -140, 0.08, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    frame.BorderSizePixel = 0
+    frame.Parent = sg
+    
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+    
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = Color3.fromRGB(90, 100, 255)
+    stroke.Thickness = 1.5
+    stroke.Transparency = 0.4
+    
+    local titleLabel = Instance.new("TextLabel", frame)
+    titleLabel.Size = UDim2.new(1,0,0.4,0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = title
+    titleLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 16
+    
+    local textLabel = Instance.new("TextLabel", frame)
+    textLabel.Size = UDim2.new(1,0,0.6,0)
+    textLabel.Position = UDim2.new(0,0,0.4,0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = text
+    textLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+    textLabel.Font = Enum.Font.Gotham
+    textLabel.TextSize = 14
+    
+    game:GetService("Debris"):AddItem(sg, duration or 3)
+end
+
+--esp creation
+local function createPlayerESP(player)
+    if player == LocalPlayer then return end
+    
+    local function setup(character)
+        local hrp = character:WaitForChild("HumanoidRootPart", 8)
+        if not hrp then return end
+        
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "esp"
+        bb.Adornee = hrp
+        bb.Size = UDim2.new(0, 180, 0, 60)
+        bb.StudsOffset = Vector3.new(0, 3.2, 0)
+        bb.AlwaysOnTop = true
+        bb.Parent = hrp
+        
+        local f = Instance.new("Frame", bb)
+        f.Size = UDim2.new(1,0,1,0)
+        f.BackgroundColor3 = Color3.fromRGB(15,15,25)
+        f.BackgroundTransparency = 0.65
+        f.BorderSizePixel = 0
+        
+        Instance.new("UICorner", f).CornerRadius = UDim.new(0,10)
+        
+        local st = Instance.new("UIStroke", f)
+        st.Color = Color3.fromRGB(100,110,255)
+        st.Thickness = 1.2
+        st.Transparency = 0.5
+        
+        local name = Instance.new("TextLabel", f)
+        name.Size = UDim2.new(1,-10,0.55,0)
+        name.Position = UDim2.new(0,5,0,5)
+        name.BackgroundTransparency = 1
+        name.Text = player.DisplayName or player.Name
+        name.TextColor3 = Color3.fromRGB(240,240,255)
+        name.TextStrokeTransparency = 0.7
+        name.Font = Enum.Font.GothamBold
+        name.TextScaled = true
+        
+        local dist = Instance.new("TextLabel", f)
+        dist.Size = UDim2.new(1,-10,0.35,0)
+        dist.Position = UDim2.new(0,5,0.6,0)
+        dist.BackgroundTransparency = 1
+        dist.TextColor3 = Color3.fromRGB(120,255,140)
+        dist.TextStrokeTransparency = 0.8
+        dist.Font = Enum.Font.Gotham
+        dist.TextScaled = true
+        
+        local heartbeat = RunService.Heartbeat:Connect(function()
+            if not playerESPEnabled then return end
+            if not LocalPlayer.Character then return end
+            local lhrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if not lhrp then return end
+            local d = (hrp.Position - lhrp.Position).Magnitude
+            dist.Text = math.floor(d + 0.5) .. " studs"
+        end)
+        
+        table.insert(playerESPConnections, heartbeat)
+    end
+    
+    if player.Character then task.spawn(setup, player.Character) end
+    
+    local charConn = player.CharacterAdded:Connect(function(char)
+        if playerESPEnabled then
+            task.wait(0.3)
+            setup(char)
+        end
+    end)
+    
+    table.insert(playerESPConnections, charConn)
+end
+
+local function removeAllESP()
+    for _, c in ipairs(playerESPConnections) do
+        pcall(function() c:Disconnect() end)
+    end
+    playerESPConnections = {}
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local esp = hrp:FindFirstChild("esp")
+                if esp then esp:Destroy() end
+            end
+        end
+    end
+end
+
+--logic
+local function toggleESP()
+    playerESPEnabled = not playerESPEnabled
+    
+    if playerESPEnabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            createPlayerESP(p)
+        end
+        
+        
+        if not playerAddedConnection then
+            playerAddedConnection = Players.PlayerAdded:Connect(function(p)
+                if playerESPEnabled then
+                    createPlayerESP(p)
+                end
+            end)
+            table.insert(playerESPConnections, playerAddedConnection)
+        end
+        
+        notify("ESP", "ENABLED", 2.5)
+    else
+        removeAllESP()
+        notify("ESP", "DISABLED", 2.5)
+    end
+end
+
+--gui
+local playerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
+
+local sg = Instance.new("ScreenGui")
+sg.Name = "toggle"
+sg.ResetOnSpawn = false
+sg.Parent = playerGui
+
+task.wait(0.15)
+
+local frame = Instance.new("Frame", sg)
+frame.Size = UDim2.new(0, 220, 0, 110)
+frame.Position = UDim2.new(0.5, -110, 0.5, -55)
+frame.BackgroundColor3 = Color3.fromRGB(18,18,28)
+frame.BorderSizePixel = 0
+frame.Visible = true
+
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0,16)
+
+local grad = Instance.new("UIGradient", frame)
+grad.Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(30,30,50)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(15,15,30))
+}
+grad.Rotation = 90
+
+local stroke = Instance.new("UIStroke", frame)
+stroke.Color = Color3.fromRGB(90,100,255)
+stroke.Thickness = 2
+stroke.Transparency = 0.45
+
+
+Instance.new("TextLabel", frame).Text = "PLAYERS ESP"
+do local t = frame:FindFirstChildOfClass("TextLabel")
+    t.Size = UDim2.new(1,0,0,36)
+    t.BackgroundTransparency = 1
+    t.TextColor3 = Color3.fromRGB(210,210,255)
+    t.Font = Enum.Font.GothamBlack
+    t.TextSize = 22
+    t.TextStrokeTransparency = 0.8
+end
+
+
+local statusLabel = Instance.new("TextLabel", frame)
+statusLabel.Size = UDim2.new(1,-20,0,28)
+statusLabel.Position = UDim2.new(0,10,0,42)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Status: Disabled"
+statusLabel.TextColor3 = Color3.fromRGB(220,80,80)
+statusLabel.Font = Enum.Font.GothamSemibold
+statusLabel.TextSize = 15
+
+local btn = Instance.new("TextButton", frame)
+btn.Size = UDim2.new(0.85,0,0,48)
+btn.Position = UDim2.new(0.075,0,0.58,0)
+btn.BackgroundColor3 = Color3.fromRGB(60,60,110)
+btn.Text = "ENABLE"
+btn.TextColor3 = Color3.fromRGB(235,235,255)
+btn.Font = Enum.Font.GothamBold
+btn.TextSize = 18
+btn.BorderSizePixel = 0
+
+Instance.new("UICorner", btn).CornerRadius = UDim.new(0,12)
+
+local btnStroke = Instance.new("UIStroke", btn)
+btnStroke.Color = Color3.fromRGB(120,130,255)
+btnStroke.Thickness = 1.8
+
+
+local function tween(o, p, v, t)
+    TweenService:Create(o, TweenInfo.new(t or 0.25, Enum.EasingStyle.Quint), {[p]=v}):Play()
+end
+
+btn.MouseEnter:Connect(function()
+    tween(btn, "BackgroundColor3", Color3.fromRGB(80,80,140), 0.25)
+    tween(btnStroke, "Thickness", 2.4, 0.25)
+end)
+
+btn.MouseLeave:Connect(function()
+    tween(btn, "BackgroundColor3", Color3.fromRGB(60,60,110), 0.25)
+    tween(btnStroke, "Thickness", 1.8, 0.25)
+end)
+
+btn.MouseButton1Click:Connect(function()
+    toggleESP()
+    
+    
+    task.spawn(function()
+        task.wait(0.03)
+        statusLabel.Text = "Status: " .. (playerESPEnabled and "Enabled" or "Disabled")
+        statusLabel.TextColor3 = playerESPEnabled and Color3.fromRGB(100,255,140) or Color3.fromRGB(220,80,80)
+        btn.Text = playerESPEnabled and "DISABLE" or "ENABLE"
+    end)
+    
+    
+    local flash = TweenService:Create(btn, TweenInfo.new(0.08), {BackgroundColor3 = Color3.fromRGB(100,100,180)})
+    flash:Play()
+    flash.Completed:Wait()
+    tween(btn, "BackgroundColor3", Color3.fromRGB(80,80,140), 0.16)
+end)
+
+local drag, dragInput, dragStart, startPos
+frame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        drag = true
+        dragStart = input.Position
+        startPos = frame.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then drag = false end end)
+    end
+end)
+
+frame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and drag then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        frame.Visible = not frame.Visible
+    end
+end)
+
+Print("ben")
